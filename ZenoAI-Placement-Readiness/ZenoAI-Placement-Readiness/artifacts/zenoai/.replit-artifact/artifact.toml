@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "ZenoAI Placement Readiness"
+description = "A focused AI placement mentor dashboard that turns student performance into a readiness score, skill-gap priorities, adaptive preparation tasks, company fit, and mock interview practice."
+version = "1.0.0"
+id = "artifacts/zenoai"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25944
+
+[services.development]
+run = "pnpm --filter @workspace/zenoai run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/zenoai", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/zenoai/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25944"
+BASE_PATH = "/"

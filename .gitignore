@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Environment and local files
+.env
+.env.local
+.env.*.local
+*.log
+
+# Editor & System
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temp / extracted zip folders
+*zip*/
+*.zip
+cleanup.mjs
+
