@@ -248,3 +248,75 @@ select { appearance:none; width:100%; background:#171323; border:1px solid rgba(
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior:auto !important; }
 }
+
+/* Accessible Modal & Popover Styles */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 6, 16, 0.78);
+  backdrop-filter: blur(8px);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 16px;
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.modal-card {
+  width: min(560px, 100%);
+  background: #140d24;
+  border: 1px solid rgba(220, 140, 255, 0.3);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(181, 72, 237, 0.2);
+  border-radius: 14px;
+  padding: 24px;
+  color: #f3ebf9;
+  position: relative;
+  animation: scaleUp 0.2s ease-out;
+}
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: #fefbff;
+}
+.popover-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  width: 320px;
+  background: #170f28;
+  border: 1px solid rgba(220, 140, 255, 0.25);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+  border-radius: 10px;
+  padding: 12px;
+  z-index: 50;
+  animation: slideDown 0.18s ease-out;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Enhanced Accessible Focus States */
+button:focus-visible, 
+input:focus-visible, 
+select:focus-visible, 
+textarea:focus-visible {
+  outline: 2px solid #eb8cff !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 12px rgba(235, 140, 255, 0.5) !important;
+}

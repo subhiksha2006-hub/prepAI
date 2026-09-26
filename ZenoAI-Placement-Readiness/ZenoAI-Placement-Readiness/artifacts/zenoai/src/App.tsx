@@ -1,4 +1,4 @@
-import { type ReactElement, useRef, useState } from 'react';
+import { type ReactElement, useRef, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { 
   ArrowUpRight, 
@@ -10,6 +10,8 @@ import {
   ChevronRight, 
   CircleDot, 
   Clock3, 
+  HelpCircle, 
+  Info, 
   LayoutDashboard, 
   Map, 
   MessageSquare, 
@@ -17,12 +19,14 @@ import {
   Play, 
   Plus, 
   RefreshCw, 
+  Save, 
   Settings, 
   ShieldCheck, 
   SlidersHorizontal, 
   Sparkles, 
   Star, 
   Target, 
+  User, 
   X, 
   Zap 
 } from 'lucide-react';
@@ -44,6 +48,14 @@ const queryClient = new QueryClient({
 
 type View = 'overview' | 'gaps' | 'roadmap' | 'interview';
 
+interface NotificationItem {
+  id: string;
+  title: string;
+  desc: string;
+  time: string;
+  unread: boolean;
+}
+
 function AppShell() {
   const qc = useQueryClient();
   const [activeView, setActiveView] = useState<View>('overview');
@@ -56,13 +68,46 @@ function AppShell() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [showAddTask, setShowAddTask] = useState(false);
 
+  // Modals & Popovers state
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showGapModal, setShowGapModal] = useState(false);
+  const [showLogicModal, setShowLogicModal] = useState(false);
+  const [selectedGapTab, setSelectedGapTab] = useState('Coding');
+
+  // Notifications state
+  const [notifications, setNotifications] = useState<NotificationItem[]>([
+    { id: '1', title: 'Razorpay Campus Drive', desc: 'Mock assessment windows open next week. Complete sliding window prep.', time: '10m ago', unread: true },
+    { id: '2', title: 'Signal Recalibrated', desc: 'Readiness climbed +4% following your REST API design review.', time: '2h ago', unread: true },
+    { id: '3', title: 'New Practice Question', desc: 'Added: Distributed Rate Limiter for backend roles.', time: '1d ago', unread: false },
+  ]);
+
+  // Profile editable state
+  const [profileName, setProfileName] = useState('Arjun Shah');
+  const [profileDept, setProfileDept] = useState('Computer Science');
+  const [profileYear, setProfileYear] = useState('2026');
+
   const overviewRef = useRef<HTMLElement>(null);
   const gapsRef = useRef<HTMLElement>(null);
   const roadmapRef = useRef<HTMLElement>(null);
   const interviewRef = useRef<HTMLElement>(null);
 
-  // Queries connected to Express Backend
-  const { data: profileData, isLoading: isProfileLoading } = useQuery({
+  // Keyboard accessibility for closing dialogs with Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowSettingsModal(false);
+        setShowNotifications(false);
+        setShowGapModal(false);
+        setShowLogicModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Queries
+  const { data: profileData } = useQuery({
     queryKey: ['profile'],
     queryFn: api.getProfile,
   });
@@ -150,10 +195,10 @@ function AppShell() {
 
   const currentProfile = profileData?.profile || {
     id: 'student_1',
-    name: 'Arjun Shah',
+    name: profileName,
     avatarInitials: 'AS',
-    department: 'Computer Science',
-    gradYear: 2026,
+    department: profileDept,
+    gradYear: Number(profileYear),
     overallReadiness: 68,
     weeklyDelta: 4,
     percentileRank: 18,
@@ -189,6 +234,7 @@ function AppShell() {
   ];
 
   const currentQuestion = questions[selectedQuestionIndex] || questions[0];
+  const unreadNotificationsCount = notifications.filter(n => n.unread).length;
 
   const handleStartMock = () => {
     setMockActive(true);
@@ -206,18 +252,24 @@ function AppShell() {
     evaluateMutation.mutate({ qId: currentQuestion.id, ans: interviewAnswer });
   };
 
+  const markNotificationsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+    showToast('All notifications marked as read.');
+  };
+
   return (
     <div className="zeno-app">
       <div className="shell">
         <aside className="sidebar" aria-label="Primary navigation">
-          <div className="brand">
-            <div className="brand-logo-container">
-              <img src="/prep-ai-logo.jpg" alt="prep AI logo" className="brand-logo-img" />
+          <div className="brand" role="banner">
+            <div className="brand-logo-container" tabIndex={0} aria-label="Prep AI brand logo" role="img">
+              <img src="/prep-ai-logo.jpg" alt="Prep AI Logo" className="brand-logo-img" />
             </div>
             <div className="brand-name">prep<span>AI</span></div>
           </div>
-          <div className="nav-label eyebrow">Workspace</div>
-          <nav className="nav">
+          
+          <div className="nav-label eyebrow" id="nav-group-label">Workspace</div>
+          <nav className="nav" aria-labelledby="nav-group-label">
             <NavButton icon={<LayoutDashboard size={16} />} label="Overview" active={activeView === 'overview'} onClick={() => navigateView('overview')} />
             <NavButton icon={<BarChart3 size={16} />} label="Skill gaps" active={activeView === 'gaps'} onClick={() => navigateView('gaps')} />
             <NavButton icon={<Map size={16} />} label="My roadmap" active={activeView === 'roadmap'} onClick={() => navigateView('roadmap')} />
@@ -226,36 +278,118 @@ function AppShell() {
           
           <div className="side-spacer" />
           
-          {/* Backend Connection Indicator Badge */}
-          <div style={{ padding: '0 12px 14px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#a295ba' }}>
+          <div style={{ padding: '0 12px 14px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#a295ba' }} aria-live="polite">
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#45f59c', boxShadow: '0 0 8px #45f59c', display: 'inline-block' }} />
             <span>API Engine: <strong>Live</strong></span>
           </div>
 
-          <button className="nav-button" type="button" data-testid="button-settings" onClick={() => showToast('Backend profile sync active.')}>
-            <Settings size={16} /><span>Settings</span>
+          <button 
+            className="nav-button" 
+            type="button" 
+            data-testid="button-settings" 
+            aria-haspopup="dialog"
+            aria-expanded={showSettingsModal}
+            onClick={() => setShowSettingsModal(true)}
+          >
+            <Settings size={16} aria-hidden="true" />
+            <span>Settings</span>
           </button>
-          <div className="profile-mini">
-            <div className="avatar">{currentProfile.avatarInitials}</div>
-            <div><strong>{currentProfile.name}</strong><small>{currentProfile.department} · {currentProfile.gradYear}</small></div>
-          </div>
+
+          <button 
+            className="profile-mini" 
+            type="button"
+            aria-label={`Open profile settings for ${profileName}`}
+            onClick={() => setShowSettingsModal(true)}
+            style={{ width: '100%', background: 'transparent', border: 'none', borderTop: '1px solid rgba(207, 189, 255, .12)', textAlign: 'left', cursor: 'pointer' }}
+          >
+            <div className="avatar" aria-hidden="true">{profileName.split(' ').map(n => n[0]).join('')}</div>
+            <div>
+              <strong>{profileName}</strong>
+              <small>{profileDept} · {profileYear}</small>
+            </div>
+          </button>
         </aside>
 
-        <main className="main">
+        <main className="main" id="main-content">
           <header className="topbar">
-            <div className="breadcrumb">
+            <div className="breadcrumb" aria-label="Breadcrumb navigation">
               <span>Workspace</span>
-              <ChevronRight size={13} style={{ verticalAlign: 'middle', margin: '0 5px' }} />
+              <ChevronRight size={13} style={{ verticalAlign: 'middle', margin: '0 5px' }} aria-hidden="true" />
               <strong>{activeView === 'overview' ? 'Readiness overview' : activeView === 'gaps' ? 'Skill gap analysis' : activeView === 'roadmap' ? 'Personal roadmap' : 'AI mock interview'}</strong>
             </div>
-            <div className="top-actions">
-              <button className="icon-button" type="button" aria-label="Refresh signals" data-testid="button-refresh" onClick={() => { qc.invalidateQueries(); showToast('Recalibrating placement signals from backend…'); }}>
-                <RefreshCw size={14} />
+            
+            <div className="top-actions" style={{ position: 'relative' }}>
+              <button 
+                className="icon-button" 
+                type="button" 
+                aria-label="Refresh placement signals from backend" 
+                data-testid="button-refresh" 
+                onClick={() => { qc.invalidateQueries(); showToast('Recalibrating placement signals from backend…'); }}
+              >
+                <RefreshCw size={14} aria-hidden="true" />
               </button>
-              <button className="icon-button" type="button" aria-label="View notifications" data-testid="button-notifications" onClick={() => showToast('You are on track for upcoming placement drives.')}>
-                <Bell size={15} />
+              
+              <button 
+                className="icon-button" 
+                type="button" 
+                aria-label={`Notifications (${unreadNotificationsCount} unread)`}
+                aria-haspopup="menu"
+                aria-expanded={showNotifications}
+                data-testid="button-notifications" 
+                onClick={() => setShowNotifications(!showNotifications)}
+                style={{ position: 'relative' }}
+              >
+                <Bell size={15} aria-hidden="true" />
+                {unreadNotificationsCount > 0 && (
+                  <span 
+                    style={{ position: 'absolute', top: 6, right: 6, width: 7, height: 7, borderRadius: '50%', background: '#ff5c8a', boxShadow: '0 0 6px #ff5c8a' }} 
+                    aria-hidden="true"
+                  />
+                )}
               </button>
-              <div className="avatar top-avatar" aria-label={`${currentProfile.name} profile`}>{currentProfile.avatarInitials}</div>
+
+              {/* Accessible Notifications Popover */}
+              {showNotifications && (
+                <div 
+                  className="popover-menu" 
+                  role="menu" 
+                  aria-label="Recent notifications"
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                    <strong style={{ fontSize: 13, color: '#f3ebfa' }}>Notifications</strong>
+                    {unreadNotificationsCount > 0 && (
+                      <button 
+                        type="button" 
+                        onClick={markNotificationsRead}
+                        style={{ background: 'none', border: 'none', color: '#ea96ff', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        Mark all as read
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gap: 8, maxHeight: 240, overflowY: 'auto' }}>
+                    {notifications.map(n => (
+                      <div key={n.id} style={{ padding: '8px 10px', borderRadius: 6, background: n.unread ? 'rgba(216,121,239,0.12)' : 'rgba(255,255,255,0.02)', borderLeft: n.unread ? '3px solid #d879ef' : '3px solid transparent' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600, color: '#fdfafd' }}>
+                          <span>{n.title}</span>
+                          <span style={{ fontSize: 10, color: '#9b8eac', fontWeight: 400 }}>{n.time}</span>
+                        </div>
+                        <p style={{ margin: '4px 0 0', fontSize: 11, color: '#c9bede', lineHeight: 1.35 }}>{n.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button 
+                className="avatar top-avatar" 
+                type="button"
+                aria-label={`Open settings profile for ${profileName}`}
+                onClick={() => setShowSettingsModal(true)}
+                style={{ cursor: 'pointer', border: 'none' }}
+              >
+                {profileName.split(' ').map(n => n[0]).join('')}
+              </button>
             </div>
           </header>
 
@@ -263,7 +397,7 @@ function AppShell() {
             <section className="welcome-row" ref={overviewRef} aria-labelledby="welcome-title">
               <div>
                 <div className="eyebrow">Monday · Placement Readiness Suite</div>
-                <h1 id="welcome-title">Good morning, {currentProfile.name.split(' ')[0]}.</h1>
+                <h1 id="welcome-title">Good morning, {profileName.split(' ')[0]}.</h1>
                 <p className="subhead">Backend model synchronized. Target signal is calibrated in real-time.</p>
               </div>
               <div className="target-control">
@@ -272,6 +406,7 @@ function AppShell() {
                   <select 
                     id="target-company" 
                     value={currentProfile.targetCompanyIndex} 
+                    aria-label="Select target placement company and role"
                     data-testid="select-target-company" 
                     onChange={(event) => changeTargetMutation.mutate(Number(event.target.value))}
                   >
@@ -279,7 +414,7 @@ function AppShell() {
                       <option value={index} key={item.company}>{item.company} · {item.role.split(' · ')[0]}</option>
                     ))}
                   </select>
-                  <ChevronDown size={15} />
+                  <ChevronDown size={15} aria-hidden="true" />
                 </div>
               </div>
             </section>
@@ -292,22 +427,22 @@ function AppShell() {
                     <div className="panel-kicker">Placement readiness</div>
                     <h2 className="panel-title" id="readiness-title">Your current signal</h2>
                   </div>
-                  <ShieldCheck size={17} color="#d879ef" />
+                  <ShieldCheck size={17} color="#d879ef" aria-hidden="true" />
                 </div>
                 <svg className="constellation" width="105" height="90" viewBox="0 0 105 90" aria-hidden="true">
                   <line x1="8" y1="59" x2="46" y2="25" /><line x1="46" y1="25" x2="86" y2="42" /><line x1="46" y1="25" x2="61" y2="75" /><line x1="61" y1="75" x2="86" y2="42" />
                   <circle cx="8" cy="59" r="2" /><circle cx="46" cy="25" r="3" /><circle cx="86" cy="42" r="2" /><circle cx="61" cy="75" r="2" />
                 </svg>
-                <div className="score-display">
+                <div className="score-display" aria-live="polite">
                   <span className="score-number">{currentProfile.overallReadiness}</span>
                   <span className="score-percent">%</span>
                 </div>
                 <div className="score-caption">Top {currentProfile.percentileRank}% of candidates targeting {currentTarget.company}</div>
-                <div className="score-track" aria-label={`${currentProfile.overallReadiness}% overall readiness`}>
+                <div className="score-track" role="progressbar" aria-valuenow={currentProfile.overallReadiness} aria-valuemin={0} aria-valuemax={100} aria-label="Overall placement readiness score">
                   <span style={{ width: `${currentProfile.overallReadiness}%` }} />
                 </div>
                 <div className="delta">
-                  <ArrowUpRight size={12} style={{ verticalAlign: 'middle' }} /> +{currentProfile.weeklyDelta} pts this week
+                  <ArrowUpRight size={12} style={{ verticalAlign: 'middle' }} aria-hidden="true" /> +{currentProfile.weeklyDelta} pts this week
                 </div>
               </section>
 
@@ -318,13 +453,13 @@ function AppShell() {
                     <div className="panel-kicker">Evidence-weighted profile</div>
                     <h2 className="panel-title" id="skills-title">Skill breakdown</h2>
                   </div>
-                  <SlidersHorizontal size={16} color="#9f86b4" />
+                  <SlidersHorizontal size={16} color="#9f86b4" aria-hidden="true" />
                 </div>
-                <div className="categories">
+                <div className="categories" role="list">
                   {categoryData.map((category) => (
-                    <div className="category-row" key={category.name} data-testid={`status-skill-${category.name.toLowerCase()}`}>
+                    <div className="category-row" key={category.name} role="listitem" data-testid={`status-skill-${category.name.toLowerCase()}`}>
                       <span className="category-name">{category.name}</span>
-                      <div className="thin-track">
+                      <div className="thin-track" role="progressbar" aria-valuenow={category.score} aria-valuemin={0} aria-valuemax={100} aria-label={`${category.name} score ${category.score}%`}>
                         <span style={{ 
                           width: `${category.score}%`, 
                           background: category.score >= 70 ? 'linear-gradient(90deg, #b548ed, #e9a1ff)' : category.score >= 55 ? '#a875db' : '#ea6b8e' 
@@ -334,8 +469,16 @@ function AppShell() {
                     </div>
                   ))}
                 </div>
-                <button className="secondary-button" type="button" data-testid="button-view-gaps" onClick={() => navigateView('gaps')} style={{ marginTop: 20 }}>
-                  View gap analysis <ArrowUpRight size={13} />
+                <button 
+                  className="secondary-button" 
+                  type="button" 
+                  data-testid="button-view-gaps" 
+                  aria-haspopup="dialog"
+                  aria-expanded={showGapModal}
+                  onClick={() => setShowGapModal(true)} 
+                  style={{ marginTop: 20 }}
+                >
+                  View gap analysis <ArrowUpRight size={13} aria-hidden="true" />
                 </button>
               </section>
 
@@ -349,8 +492,14 @@ function AppShell() {
                 <p className="next-copy">
                   Targeted analysis for <strong>{currentTarget.company}</strong> indicates mastering core data structure patterns and answering live system questions yields highest interview clearance.
                 </p>
-                <button className="primary-button" type="button" data-testid="button-next-action" onClick={() => navigateView('roadmap')}>
-                  Open next action <ArrowUpRight size={14} />
+                <button 
+                  className="primary-button" 
+                  type="button" 
+                  data-testid="button-next-action" 
+                  onClick={() => navigateView('roadmap')}
+                  aria-label="Open next recommended roadmap milestone action"
+                >
+                  Open next action <ArrowUpRight size={14} aria-hidden="true" />
                 </button>
               </section>
             </div>
@@ -367,30 +516,39 @@ function AppShell() {
                     <span className="panel-kicker">{completedTasks}/{tasks.length} complete</span>
                     <button 
                       className="icon-button" 
-                      style={{ width: 26, height: 26 }} 
+                      style={{ width: 28, height: 28 }} 
                       type="button" 
-                      title="Add roadmap task" 
+                      aria-label="Toggle add new milestone form" 
+                      aria-expanded={showAddTask}
                       onClick={() => setShowAddTask(!showAddTask)}
                     >
-                      <Plus size={13} />
+                      <Plus size={14} aria-hidden="true" />
                     </button>
                   </div>
                 </div>
 
                 {showAddTask && (
                   <div style={{ marginBottom: 14, padding: 12, borderRadius: 8, background: 'rgba(28, 18, 48, 0.75)', border: '1px solid rgba(220, 140, 255, 0.2)' }}>
+                    <label htmlFor="input-new-task" style={{ display: 'block', fontSize: 11, color: '#e8cbfb', marginBottom: 6, fontWeight: 600 }}>New Adaptive Goal:</label>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <input 
+                        id="input-new-task"
                         type="text" 
                         placeholder="e.g. Master Trie prefix trees & graph BFS…" 
                         value={newTaskTitle}
                         onChange={(e) => setNewTaskTitle(e.target.value)}
-                        style={{ flex: 1, background: '#120e1f', border: '1px solid rgba(200, 150, 255, 0.3)', borderRadius: 6, color: '#f3e8fc', padding: '6px 10px', fontSize: 12 }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && newTaskTitle.trim()) {
+                            addTaskMutation.mutate(newTaskTitle);
+                          }
+                        }}
+                        style={{ flex: 1, background: '#120e1f', border: '1px solid rgba(200, 150, 255, 0.3)', borderRadius: 6, color: '#f3e8fc', padding: '7px 10px', fontSize: 12 }}
                       />
                       <button 
                         className="primary-button" 
-                        style={{ padding: '6px 12px', fontSize: 12 }}
+                        style={{ padding: '7px 14px', fontSize: 12 }}
                         type="button" 
+                        aria-label="Confirm adding new task"
                         onClick={() => { if (newTaskTitle.trim()) addTaskMutation.mutate(newTaskTitle); }}
                       >
                         Add Task
@@ -399,24 +557,26 @@ function AppShell() {
                   </div>
                 )}
 
-                <div className="roadmap-list">
+                <div className="roadmap-list" role="list" aria-label="Placement roadmap milestones">
                   {tasks.map((task: RoadmapTask) => (
-                    <div className={`task ${task.done ? 'done' : ''}`} key={task.id}>
+                    <div className={`task ${task.done ? 'done' : ''}`} key={task.id} role="listitem">
                       <button 
                         className={`task-check ${task.done ? 'done' : ''}`} 
                         type="button" 
-                        aria-label={task.done ? `Mark ${task.title} incomplete` : `Mark ${task.title} complete`} 
+                        role="checkbox"
+                        aria-checked={task.done}
+                        aria-label={`Mark milestone "${task.title}" as ${task.done ? 'incomplete' : 'complete'}`} 
                         data-testid={`button-task-${task.id}`} 
                         onClick={() => toggleTaskMutation.mutate(task.id)}
                       >
-                        {task.done && <Check size={13} strokeWidth={3} />}
+                        {task.done && <Check size={13} strokeWidth={3} aria-hidden="true" />}
                       </button>
                       <div style={{ flex: 1 }}>
                         <p className="task-title">{task.title}</p>
                         <div className="task-meta">{task.meta} {task.rationale && <span style={{ opacity: 0.7 }}>· {task.rationale}</span>}</div>
                       </div>
-                      <span className="task-time">
-                        <Clock3 size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{task.time}
+                      <span className="task-time" aria-label={`Estimated duration ${task.time}`}>
+                        <Clock3 size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} aria-hidden="true" />{task.time}
                       </span>
                     </div>
                   ))}
@@ -425,8 +585,15 @@ function AppShell() {
                   <span className="progress-copy">
                     Daily focus <strong>{tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0}%</strong>
                   </span>
-                  <button className="secondary-button" type="button" data-testid="button-roadmap-details" onClick={() => showToast('Roadmap recalculates automatically on every task change.')}>
-                    See plan logic <ChevronRight size={13} />
+                  <button 
+                    className="secondary-button" 
+                    type="button" 
+                    data-testid="button-roadmap-details" 
+                    aria-haspopup="dialog"
+                    aria-expanded={showLogicModal}
+                    onClick={() => setShowLogicModal(true)}
+                  >
+                    See plan logic <ChevronRight size={13} aria-hidden="true" />
                   </button>
                 </div>
               </section>
@@ -438,10 +605,10 @@ function AppShell() {
                     <div className="panel-kicker">Target company match</div>
                     <h2 className="panel-title" id="role-title">Role fit</h2>
                   </div>
-                  <Target size={16} color="#c77be0" />
+                  <Target size={16} color="#c77be0" aria-hidden="true" />
                 </div>
                 <div className="role-company">
-                  <div className="company-orb">{currentTarget.short}</div>
+                  <div className="company-orb" aria-hidden="true">{currentTarget.short}</div>
                   <div>
                     <strong>{currentTarget.company}</strong>
                     <span>{currentTarget.role}</span>
@@ -452,27 +619,19 @@ function AppShell() {
                     <strong>{currentTarget.score + (completedTasks > 1 ? 2 : 0)}%</strong>
                     <small> role readiness match</small>
                   </div>
-                  <span className="up"><ArrowUpRight size={12} /> on track</span>
+                  <span className="up"><ArrowUpRight size={12} aria-hidden="true" /> on track</span>
                 </div>
-                <div className="skill-list">
+                <div className="skill-list" role="list" aria-label="Role skill match status">
                   {currentTarget.skills?.map((skill, index) => (
-                    <div className="skill-line" key={index}>
+                    <div className="skill-line" key={index} role="listitem">
                       <span>{skill.name}</span>
                       {skill.status === 'matched' ? (
-                        <span className="match"><Check size={12} /> matched</span>
+                        <span className="match"><Check size={12} style={{ verticalAlign: 'middle' }} aria-hidden="true" /> matched</span>
                       ) : (
                         <span className="gap">gap {skill.delta ? `· ${skill.delta}` : ''}</span>
                       )}
                     </div>
                   ))}
-                  {(!currentTarget.skills || currentTarget.skills.length === 0) && (
-                    <>
-                      <div className="skill-line"><span>Data structures</span><span className="match"><Check size={12} /> matched</span></div>
-                      <div className="skill-line"><span>REST API design</span><span className="gap">gap · 18 pts</span></div>
-                      <div className="skill-line"><span>Problem solving</span><span className="match"><Check size={12} /> matched</span></div>
-                      <div className="skill-line"><span>System design basics</span><span className="gap">gap · 24 pts</span></div>
-                    </>
-                  )}
                 </div>
               </section>
             </div>
@@ -480,15 +639,21 @@ function AppShell() {
             {/* AI Mock Interview Section */}
             <section className="panel panel-pad mock-panel" ref={interviewRef} aria-labelledby="mock-title">
               <div className="mock-copy">
-                <div className="mic-orb">{mockActive ? <CircleDot size={20} /> : <Mic2 size={20} />}</div>
+                <div className="mic-orb" aria-hidden="true">{mockActive ? <CircleDot size={20} /> : <Mic2 size={20} />}</div>
                 <div>
                   <h2 id="mock-title">{mockActive ? 'AI Interview Engine Active' : 'Pressure-test your signal.'}</h2>
                   <p>{mockActive ? `Question tailored for ${currentTarget.company} role evaluation. Submit your answer for instant rubric grading.` : `A 12-minute AI mock interview tuned to your gaps and target role at ${currentTarget.company}.`}</p>
                 </div>
               </div>
               {!mockActive ? (
-                <button className="primary-button" type="button" data-testid="button-start-interview" onClick={handleStartMock}>
-                  <Play size={14} fill="currentColor" /> Start AI mock interview
+                <button 
+                  className="primary-button" 
+                  type="button" 
+                  data-testid="button-start-interview" 
+                  onClick={handleStartMock}
+                  aria-label="Start AI mock interview session"
+                >
+                  <Play size={14} fill="currentColor" aria-hidden="true" /> Start AI mock interview
                 </button>
               ) : (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -498,38 +663,44 @@ function AppShell() {
                     disabled={isSubmittingAnswer}
                     data-testid="button-submit-interview" 
                     onClick={handleSubmitInterview}
+                    aria-label="Submit interview answer for AI rubric grading"
                   >
-                    <Zap size={14} /> {isSubmittingAnswer ? 'Evaluating with AI…' : 'Submit for AI Evaluation'}
+                    <Zap size={14} aria-hidden="true" /> {isSubmittingAnswer ? 'Evaluating with AI…' : 'Submit for AI Evaluation'}
                   </button>
                   <button 
                     className="secondary-button" 
                     type="button" 
                     data-testid="button-close-interview" 
                     onClick={() => setMockActive(false)}
+                    aria-label="Exit mock interview mode"
                   >
-                    <X size={14} /> Exit
+                    <X size={14} aria-hidden="true" /> Exit
                   </button>
                 </div>
               )}
             </section>
 
             {mockActive && (
-              <section className="panel panel-pad interview-question" aria-label="Mock interview question" style={{ marginTop: 17, background: 'rgba(24,18,39,.95)', border: '1px solid rgba(220,150,255,0.3)' }}>
+              <section className="panel panel-pad interview-question" aria-label="Mock interview question card" style={{ marginTop: 17, background: 'rgba(24,18,39,.95)', border: '1px solid rgba(220,150,255,0.3)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <div className="panel-kicker">Question 0{currentQuestion.id} · {currentQuestion.type}</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6 }} role="tablist" aria-label="Select interview question">
                     {questions.map((q, idx) => (
                       <button
                         key={q.id}
                         type="button"
+                        role="tab"
+                        aria-selected={selectedQuestionIndex === idx}
+                        aria-label={`Question ${idx + 1}: ${q.title}`}
                         onClick={() => setSelectedQuestionIndex(idx)}
                         style={{
                           background: selectedQuestionIndex === idx ? '#b548ed' : 'rgba(255,255,255,0.06)',
                           color: '#fff',
                           border: 'none',
                           borderRadius: 4,
-                          padding: '3px 8px',
-                          fontSize: 11,
+                          padding: '4px 10px',
+                          fontSize: 12,
+                          cursor: 'pointer',
                         }}
                       >
                         Q{idx + 1}
@@ -549,8 +720,10 @@ function AppShell() {
                   </div>
                 )}
 
+                <label htmlFor="interview-answer-textarea" style={{ display: 'none' }}>Interview response</label>
                 <textarea 
-                  aria-label="Your interview answer" 
+                  id="interview-answer-textarea"
+                  aria-label="Type your mock interview answer" 
                   data-testid="input-interview-answer" 
                   value={interviewAnswer}
                   onChange={(e) => setInterviewAnswer(e.target.value)}
@@ -559,10 +732,10 @@ function AppShell() {
                 />
 
                 {latestEvaluation && (
-                  <div style={{ marginTop: 20, padding: 18, background: 'rgba(18, 12, 32, 0.95)', border: '1px solid rgba(181, 72, 237, 0.45)', borderRadius: 10 }}>
+                  <div style={{ marginTop: 20, padding: 18, background: 'rgba(18, 12, 32, 0.95)', border: '1px solid rgba(181, 72, 237, 0.45)', borderRadius: 10 }} aria-live="polite">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Star size={18} color="#ffd24d" fill="#ffd24d" />
+                        <Star size={18} color="#ffd24d" fill="#ffd24d" aria-hidden="true" />
                         <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>AI Evaluation Report</h3>
                       </div>
                       <div style={{ background: 'linear-gradient(135deg, #b548ed, #ea96ff)', padding: '4px 12px', borderRadius: 20, color: '#15092b', fontWeight: 700, fontSize: 14 }}>
@@ -605,9 +778,228 @@ function AppShell() {
           </div>
         </main>
       </div>
+
+      {/* Accessible Settings Dialog Modal */}
+      {showSettingsModal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+          <div className="modal-card">
+            <div className="modal-header">
+              <h2 className="modal-title" id="settings-dialog-title">Student Profile & Settings</h2>
+              <button 
+                type="button" 
+                className="icon-button" 
+                aria-label="Close settings dialog" 
+                onClick={() => setShowSettingsModal(false)}
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: 14 }}>
+              <div>
+                <label htmlFor="settings-name" style={{ display: 'block', fontSize: 12, color: '#c9bfe0', marginBottom: 5 }}>Full Name</label>
+                <input 
+                  id="settings-name" 
+                  type="text" 
+                  value={profileName} 
+                  onChange={(e) => setProfileName(e.target.value)}
+                  style={{ width: '100%', background: '#0e091a', border: '1px solid rgba(220,150,255,0.3)', borderRadius: 6, color: '#fff', padding: '8px 12px', fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="settings-dept" style={{ display: 'block', fontSize: 12, color: '#c9bfe0', marginBottom: 5 }}>Department & Major</label>
+                <input 
+                  id="settings-dept" 
+                  type="text" 
+                  value={profileDept} 
+                  onChange={(e) => setProfileDept(e.target.value)}
+                  style={{ width: '100%', background: '#0e091a', border: '1px solid rgba(220,150,255,0.3)', borderRadius: 6, color: '#fff', padding: '8px 12px', fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="settings-year" style={{ display: 'block', fontSize: 12, color: '#c9bfe0', marginBottom: 5 }}>Graduation Year</label>
+                <input 
+                  id="settings-year" 
+                  type="text" 
+                  value={profileYear} 
+                  onChange={(e) => setProfileYear(e.target.value)}
+                  style={{ width: '100%', background: '#0e091a', border: '1px solid rgba(220,150,255,0.3)', borderRadius: 6, color: '#fff', padding: '8px 12px', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ padding: '12px', borderRadius: 8, background: 'rgba(220,140,255,0.06)', border: '1px solid rgba(220,140,255,0.15)' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#e8cbfb', marginBottom: 4 }}>Placement Preferences</div>
+                <div style={{ fontSize: 11, color: '#b9aed0' }}>Targeting Top Product Firms · Daily AI Readiness Calibration Active</div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button 
+                  type="button" 
+                  className="secondary-button" 
+                  onClick={() => setShowSettingsModal(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  className="primary-button" 
+                  onClick={() => {
+                    setShowSettingsModal(false);
+                    showToast('Profile settings saved successfully.');
+                  }}
+                >
+                  <Save size={14} aria-hidden="true" /> Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Accessible Skill Gap Analysis Modal */}
+      {showGapModal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="gap-dialog-title">
+          <div className="modal-card" style={{ maxWidth: 640 }}>
+            <div className="modal-header">
+              <h2 className="modal-title" id="gap-dialog-title">Skill Gap Analysis & Recommendations</h2>
+              <button 
+                type="button" 
+                className="icon-button" 
+                aria-label="Close skill gap analysis dialog" 
+                onClick={() => setShowGapModal(false)}
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* Category Tabs */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }} role="tablist" aria-label="Skill categories">
+              {categoryData.map(c => (
+                <button
+                  key={c.name}
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedGapTab === c.name}
+                  onClick={() => setSelectedGapTab(c.name)}
+                  style={{
+                    background: selectedGapTab === c.name ? '#b548ed' : 'rgba(255,255,255,0.05)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    fontWeight: selectedGapTab === c.name ? 600 : 400,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {c.name} ({c.score}%)
+                </button>
+              ))}
+            </div>
+
+            {/* Tab content */}
+            {(() => {
+              const cat = categoryData.find(c => c.name === selectedGapTab) || categoryData[0];
+              return (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <span style={{ fontSize: 13, color: '#e8d5f8' }}>Domain Mastery Level</span>
+                    <strong style={{ fontSize: 16, color: cat.score >= 70 ? '#b9fbc0' : '#ff9ebb' }}>{cat.score}%</strong>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {cat.skills?.map((s, idx) => (
+                      <div key={idx} style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: '#fff' }}>{s.name}</div>
+                          <div style={{ fontSize: 11, color: s.status === 'matched' ? '#b9fbc0' : '#ff9ebb' }}>
+                            {s.status === 'matched' ? '✓ Strong proficiency verified' : '⚡ Focus area · Recommended for today'}
+                          </div>
+                        </div>
+                        {s.status !== 'matched' && (
+                          <button 
+                            type="button"
+                            className="secondary-button"
+                            style={{ padding: '4px 8px', fontSize: 11 }}
+                            onClick={() => {
+                              addTaskMutation.mutate(`Practice ${s.name}`);
+                              setShowGapModal(false);
+                            }}
+                          >
+                            + Add to Roadmap
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ marginTop: 18, padding: 12, borderRadius: 8, background: 'rgba(181, 72, 237, 0.1)', border: '1px solid rgba(220,140,255,0.2)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#ea96ff', marginBottom: 4 }}>💡 AI Recommendation:</div>
+                    <div style={{ fontSize: 12, color: '#d8cae8', lineHeight: 1.4 }}>
+                      Target candidates who clear {currentTarget.company} score above 75% in this domain. Solving 2-3 focused problems bridges this threshold.
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Accessible Plan Logic Modal */}
+      {showLogicModal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="logic-dialog-title">
+          <div className="modal-card">
+            <div className="modal-header">
+              <h2 className="modal-title" id="logic-dialog-title">Adaptive Signal & Plan Logic</h2>
+              <button 
+                type="button" 
+                className="icon-button" 
+                aria-label="Close plan logic dialog" 
+                onClick={() => setShowLogicModal(false)}
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: 12, fontSize: 13, color: '#d8cae8', lineHeight: 1.5 }}>
+              <p>
+                <strong>Prep AI Adaptive Readiness Model</strong> uses evidence-weighted calibration to determine your probability of clearing technical interviews at Tier-1 product firms.
+              </p>
+
+              <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <strong style={{ color: '#fff', display: 'block', marginBottom: 6 }}>Weight Distribution:</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 12 }}>
+                  <div>• Coding Patterns: <strong>35%</strong></div>
+                  <div>• System & API Design: <strong>25%</strong></div>
+                  <div>• AI Mock Interviews: <strong>25%</strong></div>
+                  <div>• Aptitude & Speed: <strong>15%</strong></div>
+                </div>
+              </div>
+
+              <p>
+                When you complete tasks on your roadmap or submit mock interview answers, your signals adjust dynamically in real time.
+              </p>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                <button 
+                  type="button" 
+                  className="primary-button" 
+                  onClick={() => setShowLogicModal(false)}
+                >
+                  Understood
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && (
-        <div className="toast-note" role="status" data-testid="status-toast">
-          <Sparkles size={14} style={{ verticalAlign: 'middle', marginRight: 7, color: '#ea96ff' }} />
+        <div className="toast-note" role="status" aria-live="polite" data-testid="status-toast">
+          <Sparkles size={14} style={{ verticalAlign: 'middle', marginRight: 7, color: '#ea96ff' }} aria-hidden="true" />
           {toast}
         </div>
       )}
@@ -623,8 +1015,9 @@ function NavButton({ icon, label, active, onClick }: { icon: ReactElement; label
       data-testid={`button-nav-${label.toLowerCase().replaceAll(' ', '-')}`} 
       onClick={onClick} 
       aria-current={active ? 'page' : undefined}
+      aria-label={`Navigate to ${label} view`}
     >
-      {icon}
+      <span aria-hidden="true">{icon}</span>
       <span>{label}</span>
     </button>
   );
